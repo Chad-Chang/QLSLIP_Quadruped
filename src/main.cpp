@@ -16,13 +16,16 @@
 #include "trajectory.h"
 #include <iostream>
 
+/*이 코드는 다리에 그냥 각 다리에 그냥 우송선배 알고리즘 넣은 경우 */
+
+
 using namespace std;
 
 mjvFigure figPosRW;         // RW position tracking plot
 mjvFigure figFOB;           // RWFOB GRF estimation plot
 mjvFigure figTrunkState;    // Trunk state plot
 
-double simEndtime = 100;	// Simulation End Time
+double simEndtime = 2.8;	// Simulation End Time
 // state parameters
 StateModel_ state_Model_FL;
 StateModel_ state_Model_FR;
@@ -48,23 +51,51 @@ trajectory tra_FL;
 trajectory tra_FR;
 trajectory tra_RL;
 trajectory tra_RR;
+
+
 Matrix2d jnt2bi; Matrix2d bi2jnt;
 
 Vector2d disturbance;
 Vector2d d0;
+
+
+double vx = 3;
 int t ;
+
+double M_front = 8;
+double M_rear = 9;
+double t_norm;
+double T_stand= 0.1;
+double r0  = 0.4;
+double r_td ;
+double th_td;
+Vector4d th_to;
+double th_r;
+double wd;
+Vector4d du;
+Vector2d z; Vector2d h; Vector2d o;
+
+int leg_FL =0 ;int leg_FR =1 ; int leg_RL = 2; int leg_RR =3 ;
+// Vector4d th_draw;
+
+Vector4d th_buf1;
+Vector4d th_buf2;
+double time_now;
+bool start =false;
+
+
+void traj_walking(double real_time, StateModel_* state_FL,StateModel_* state_FR,StateModel_* state_RL,StateModel_* state_RR);
 /***************** Main Controller *****************/
 void mycontroller(const mjModel* m, mjData* d)
 {   
     
-    t++ ;
+    
     // disturbance << 20*sin(d->time *10),0; // r disturbance
     /* Controllers */
     int flag_DOB = 1;           // flag for switching ON/OFF RWDOB
     int flag_admitt = 0;        // flag for switching ON/OFF admittance control
     double time_run = d->time;
-    // d-> qpos[2] = 0.5;
-    
+    // d->qpos[2] =0.5;
     
     //Admittance Control
     ctrl_FL.admittanceCtrl(&state_Model_FL,5,2,5000, flag_admitt); //parameter(omega_n,zeta,k)
@@ -77,41 +108,67 @@ void mycontroller(const mjModel* m, mjData* d)
     ctrl_FR.pid_gain_pos(5500,200, 150); 
     ctrl_RL.pid_gain_pos(5500,200, 150); 
     ctrl_RR.pid_gain_pos(5500,200, 150); 
-
-    state_Model_FL.tau_bi = state_Model_FL.jacbRW_trans * ctrl_FL.PID_pos(&state_Model_FL); // RW position feedback
-    state_Model_FR.tau_bi = state_Model_FR.jacbRW_trans * ctrl_FR.PID_pos(&state_Model_FR);
-    state_Model_RL.tau_bi = state_Model_RL.jacbRW_trans * ctrl_RL.PID_pos(&state_Model_RL);
-    state_Model_RR.tau_bi = state_Model_RR.jacbRW_trans * ctrl_RR.PID_pos(&state_Model_RR);
+    
+    // if(d->time <1)
+    // {
+    state_Model_FL.tau_bi = state_Model_FL.jacbRW_trans * (ctrl_FL.PID_pos(&state_Model_FL) ); // RW position feedback
+    state_Model_FR.tau_bi = state_Model_FR.jacbRW_trans * (ctrl_FR.PID_pos(&state_Model_FR) );
+    state_Model_RL.tau_bi = state_Model_RL.jacbRW_trans * (ctrl_RL.PID_pos(&state_Model_RL) );
+    state_Model_RR.tau_bi = state_Model_RR.jacbRW_trans * (ctrl_RR.PID_pos(&state_Model_RR) );
+    Vector2d p= state_Model_FL.jacbRW_trans * ctrl_FL.PID_pos(&state_Model_FL) ;
+    // }    
     // DOB control
+    // else
+    // {   
+    //     state_Model_FL.tau_bi << 0,0;state_Model_FR.tau_bi << 0,0; 
+    //     state_Model_RL.tau_bi << 0,0; state_Model_RR.tau_bi << 0,0;
+    
+    //     Vector2d p =  ctrl_FL.feedback_bi_control(&state_Model_FL, M_front, 1,vx/r0);
 
-    state_Model_FL.tau_bi = state_Model_FR.tau_bi + ctrl_FL.DOBRW(&state_Model_FL, 150, flag_DOB);
-    state_Model_FR.tau_bi = state_Model_FR.tau_bi + ctrl_FR.DOBRW(&state_Model_FR, 150, flag_DOB);
-    state_Model_RL.tau_bi = state_Model_RL.tau_bi + ctrl_RL.DOBRW(&state_Model_RL, 150, flag_DOB);
-    state_Model_RR.tau_bi = state_Model_RR.tau_bi + ctrl_RR.DOBRW(&state_Model_RR, 150, flag_DOB);
-       
+    //     cout<< p[0] << "   "<<p[1] << endl;
+    //     state_Model_FL.tau_bi = state_Model_FL.tau_bi + state_Model_FL.jacbRW_trans * ctrl_FL.feedback_bi_control(&state_Model_FL, M_front, 1,6)
+    //                             + ctrl_FL.nonlinear_compensation_torque(&state_Model_FL) + ctrl_FL.inertia_modulation_torque(&state_Model_FL, M_front) 
+    //                             + ctrl_FL.DOBRW(&state_Model_FL, 150, flag_DOB);
+
+    //     state_Model_FR.tau_bi = state_Model_FR.tau_bi + state_Model_FR.jacbRW_trans * ctrl_FR.feedback_bi_control(&state_Model_FR, M_front, 1,6) 
+    //                             +ctrl_FR.nonlinear_compensation_torque(&state_Model_FR) + ctrl_FR.inertia_modulation_torque(&state_Model_FR, M_front) 
+    //                             + ctrl_FR.DOBRW(&state_Model_FR, 150, flag_DOB);
+
+    //     state_Model_RL.tau_bi = state_Model_RL.tau_bi + state_Model_RL.jacbRW_trans * ctrl_RL.feedback_bi_control(&state_Model_RL, M_rear, 1,6) 
+    //                             + ctrl_RL.nonlinear_compensation_torque(&state_Model_RL) + ctrl_RL.inertia_modulation_torque(&state_Model_RL, M_rear) 
+    //                             + ctrl_RL.DOBRW(&state_Model_RL, 150, flag_DOB);
+
+    //     state_Model_RR.tau_bi = state_Model_RR.tau_bi + state_Model_RR.jacbRW_trans * ctrl_RR.feedback_bi_control(&state_Model_RR, M_rear, 1,6) 
+    //                             + ctrl_RR.nonlinear_compensation_torque(&state_Model_RR) + ctrl_RR.inertia_modulation_torque(&state_Model_RR, M_rear) 
+    //                             + ctrl_RR.DOBRW(&state_Model_RR, 150, flag_DOB);
+        
+    // }    
     // Force Observer
     ctrl_FL.FOBRW(&state_Model_FL, 100); // Rotating Workspace Force Observer (RWFOB)
     ctrl_FR.FOBRW(&state_Model_FR, 100); 
     ctrl_RL.FOBRW(&state_Model_RL, 100); 
     ctrl_RR.FOBRW(&state_Model_RR, 100); 
     
-   // Torque input Biarticular
-    d->ctrl[0] = 5000*(0-d->qpos[7]); //FLHAA  
-    d->ctrl[1] = state_Model_FL.tau_bi[0] + state_Model_FL.tau_bi[1] + disturbance[0];
-    d->ctrl[2] = state_Model_FL.tau_bi[1];
+//    // Torque input Biarticular
+//     d->ctrl[0] = 5000*(0-d->qpos[7]); //FLHAA  
+//     d->ctrl[1] = state_Model_FL.tau_bi[0] + state_Model_FL.tau_bi[1] + disturbance[0];
+//     d->ctrl[2] = state_Model_FL.tau_bi[1];
 
-    d->ctrl[3] = 5000*(0-d->qpos[10]); //FRHAA  
-    d->ctrl[4] = state_Model_FR.tau_bi[0] + state_Model_FR.tau_bi[1] +disturbance[0];
-    d->ctrl[5] = state_Model_FR.tau_bi[1];
+//     d->ctrl[3] = 5000*(0-d->qpos[10]); //FRHAA  
+//     d->ctrl[4] = state_Model_FR.tau_bi[0] + state_Model_FR.tau_bi[1] +disturbance[0];
+//     d->ctrl[5] = state_Model_FR.tau_bi[1];
 
-    d->ctrl[6] = 5000*(0-d->qpos[13]); //RLHAA  
-    d->ctrl[7] = state_Model_RL.tau_bi[0] + state_Model_RL.tau_bi[1] +disturbance[0];
-    d->ctrl[8] = state_Model_RL.tau_bi[1];
+//     d->ctrl[6] = 5000*(0-d->qpos[13]); //RLHAA  
+//     d->ctrl[7] = state_Model_RL.tau_bi[0] + state_Model_RL.tau_bi[1] +disturbance[0];
+//     d->ctrl[8] = state_Model_RL.tau_bi[1];
 
-    d->ctrl[9] = 5000*(0-d->qpos[16]); //FLHAA  
-    d->ctrl[10] = state_Model_RR.tau_bi[0] + state_Model_RR.tau_bi[1] +disturbance[0];
-    d->ctrl[11] = state_Model_RR.tau_bi[1];
-        
+//     d->ctrl[9] = 5000*(0-d->qpos[16]); //FLHAA  
+//     d->ctrl[10] = state_Model_RR.tau_bi[0] + state_Model_RR.tau_bi[1] +disturbance[0];
+//     d->ctrl[11] = state_Model_RR.tau_bi[1];
+    
+    
+    z << 1,1; h << 3,5;
+    o = tra_FL.cubic_trajectory(0.3,d->time,z,h);
     
 
     if (loop_index % data_frequency == 0) {  
@@ -124,6 +181,7 @@ void mycontroller(const mjModel* m, mjData* d)
 /***************** Main Function *****************/
 int main(int argc, const char** argv)
 {   
+    state_Model_FL.posRW[1] = pi/2 + pi/6;
     // d->qpos[]
     jnt2bi << 1,0,
         1,1;
@@ -194,10 +252,10 @@ int main(int argc, const char** argv)
     d->qpos[2] =  0.5;   // qpos[0,1,2] : trunk pos                                                                                                                 
                         // qpos[3,4,5.6] : trunk orientation quaternian
     
-    // d->qpos[3] = -0.73;
-    // d->qpos[4] = 0.73;
-    // d->qpos[5] = 0;
-    // d->qpos[6] = 0;
+    d->qpos[3] = 0.7071;
+    d->qpos[4] = -0.7071;
+    d->qpos[5] = 0;
+    d->qpos[6] = 0;
 
     d->qpos[7] = 0; //FLHAA         //d->ctrl[0] FLHAA
     d->qpos[8] = pi/4; //FLHIP       //d->ctrl[1] FLHIP
@@ -241,9 +299,9 @@ int main(int argc, const char** argv)
         //printf(" %f  %f \n", d->ctrl[0], d->ctrl[1]);
         state_Model_FL.time = d->time;
         while (d->time - simstart < 1.0 / 60.0)
-        {
+        {   
             /* Trajectory Generation */
-            int cmd_motion_type = 1;
+            int cmd_motion_type = 0;
             int mode_admitt = 1;
             
             if (cmd_motion_type == 0)   // Squat
@@ -255,10 +313,11 @@ int main(int argc, const char** argv)
             }
             else if(cmd_motion_type == 1)
             {
-                tra_FL.trajectory_walking(d->time, &state_Model_FL,0);
-                tra_FR.trajectory_walking(d->time, &state_Model_FR,1);
-                tra_RL.trajectory_walking(d->time, &state_Model_RL,2);
-                tra_RR.trajectory_walking(d->time, &state_Model_RR,3);
+                // traj_walking(d->time,&state_Model_FL, &state_Model_FR, &state_Model_RL, &state_Model_RR);
+                // tra_FL.trajectory_walking(d->time, &state_Model_FL,vx,leg_FL_no);
+                // tra_FR.trajectory_walking(d->time, &state_Model_FR,vx,leg_FR_no);
+                // tra_RL.trajectory_walking(d->time, &state_Model_RL,vx,leg_RL_no);
+                // tra_RR.trajectory_walking(d->time, &state_Model_RR,vx,leg_RR_no);
             }
             else
             {  
@@ -357,3 +416,163 @@ int main(int argc, const char** argv)
     return 1;
 }
 
+void traj_walking(double real_time, StateModel_* state_FL,StateModel_* state_FR,StateModel_* state_RL,StateModel_* state_RR)
+{
+    if(!start)
+    {
+        state_FL->posRW_ref[0]= 0.3413;
+        state_FL->posRW_ref[1]= pi/2;
+        state_FR->posRW_ref[0]= 0.3413;
+        state_FR->posRW_ref[1]= pi/2;
+        state_RL->posRW_ref[0]= 0.3413;
+        state_RL->posRW_ref[1]= pi/2;
+        state_RR->posRW_ref[0]= 0.3413;
+        state_RR->posRW_ref[1]= pi/2;
+        if(real_time >1)
+        {
+            start = true;
+            time_now = real_time;
+        }
+    }
+    double Bm = 2000;
+    double m = 6;
+    double T_max = 0.2;
+    wd = -vx/r0; // desired theta vel 
+    double h1 = 1.5;
+    
+    double T_period = 4*T_stand/3; 
+
+    t_norm = real_time-time_now;    
+    
+    r_td = r0;
+    double a = Bm/(m*r_td);
+    double b= g/(r_td);
+    double e_1 = (-a + sqrt(pow(a,2) - 4*b))/2;
+    double e_2 = (-a - sqrt(pow(a,2) - 4*b))/2;
+
+    //steady state swept angleT_stand
+    
+    double T = T_stand/3;
+
+    // cout << T_stand <<endl;
+if(start){
+    // cout << T_stand <<"  "<<t_norm << " " << t << "  "<< time_now<<endl;
+    //RL
+    if (0 <= t_norm && t_norm < T) // flight phase
+    {
+        if(t_norm >= 0  && t_norm <0.0001 ) 
+        {
+            th_to[leg_RL] = state_RL->posRW[1];
+            th_r = (2 * wd) * (((e_2 -e_1) + (e_1*exp(e_1*T_stand) - e_2*exp(e_2*T_stand))+a*(exp(e_1*T_stand) - exp(e_2 * T_stand)))/(e_1*e_2*(exp(e_1*T_stand)-exp(e_2*T_stand))));
+            du[leg_RL] = h1*(pi/2-th_r/2 -th_to[leg_RL])+th_r;
+            th_td = th_to[leg_RL] + du[leg_RL];
+        }
+        else
+        {
+            state_RL->posRW_ref[1] = th_td;
+            state_RL->posRW_ref[0] = r0;// - 0.5 * rc + 0.5 * rc * cos(2*pi/T * (t_norm - 3*T));
+
+            state_RL->posRW_des[1] = th_td;
+            state_RL->posRW_des[0] = r0;// - 0.5 * rc + 0.5 * rc * cos(2*pi/T * (t_norm - 3*T));
+        }
+    }
+    else if(T <= t_norm && t_norm < 4*T) //RL stance
+    {
+        // th_buf1[leg_RL] = ;
+        // th_draw[leg_RL_no] += 0.0001*wd;
+
+        state_RL->posRW_ref[1] += 0.0001*wd; 
+        state_RL->posRW_des[1] += 0.0001*wd; 
+        // cout <<  th_td + wd*(t_norm-T)<<endl;
+        state_RL->posRW_ref[0] = r0;
+        state_RL->posRW_des[0] = r0;
+    }
+    else if( t_norm >= 4*T)
+    {
+        time_now = real_time;
+        T_stand = -2*(th_td-pi/2)/wd; // standing time
+        if(T_stand >T_max)
+            T_stand = T_max;
+        
+    }
+
+
+//FR 
+    if (0 <= t_norm && t_norm < 3*T) 
+    {   
+        
+        state_FR->posRW_ref[1] += 0.0001*wd; 
+        state_FR->posRW_des[1] += 0.0001*wd; 
+        
+        state_FR->posRW_ref[0] = r0;
+        state_FR->posRW_des[0] = r0;
+        
+    }      
+    else if (3*T <= t_norm && t_norm < 4*T) //FL swing
+    {  
+        
+        state_FR->posRW_ref[1] = th_td;
+        state_FR->posRW_des[1] = th_td;
+        state_FR->posRW_ref[0] = r0;// - 0.5 * rc + 0.5 * rc * cos(2*pi/T * (t_norm - 3*T));
+        state_FR->posRW_des[0] = r0;
+        
+    }
+
+// // RR
+
+    if (0 <= t_norm && t_norm < 2*T)  
+    {
+        
+        state_RR->posRW_ref[1] += 0.0001*wd; 
+        state_RR->posRW_des[1] += 0.0001*wd; 
+        // cout <<" RR =  "<< state_RR->posRW_ref[1] <<endl;
+        // cout << state_RR->posRW_ref[1] <<endl;
+
+        state_RR->posRW_ref[0] = r0;
+        state_RR->posRW_des[0] = r0;
+    }
+    else if (2*T <= t_norm && t_norm < 3*T) //FR swing
+    {
+        
+        state_RR->posRW_ref[1] = th_td;
+        state_RR->posRW_des[1] = th_td;
+        state_RR->posRW_ref[0] = r0;// - 0.5 * rc + 0.5 * rc * cos(2*pi/T * (t_norm - 3*T));
+        state_RR->posRW_des[0] = r0;
+    }
+    else if(3*T <= t_norm && t_norm < 4*T)  //FR stance
+    {   
+        state_RR->posRW_ref[1] += 0.0001*wd;
+        state_RR->posRW_des[1] += 0.0001*wd;
+        state_RR->posRW_ref[0] = r0;
+        state_RR->posRW_des[0] = r0;
+    }
+
+
+
+// // FL
+    if (0 <= t_norm && t_norm < T)  //RL stance
+    {
+        
+        state_FL->posRW_ref[1] += 0.0001*wd; 
+        state_FL->posRW_des[1] += 0.0001*wd; 
+        cout<< state_RR->posRW[1]<<endl;
+        state_FL->posRW_ref[0] = r0;
+        state_FL->posRW_des[0] = r0;
+    }
+    else if (T <= t_norm && t_norm < 2*T) //RL swing
+    {
+        state_FL->posRW_ref[1] = th_td;
+        state_FL->posRW_des[1] = th_td;
+        state_FL->posRW_ref[0] = r0;// - 0.5 * rc + 0.5 * rc * cos(2*pi/T * (t_norm - 3*T));
+        state_FL->posRW_des[0] = r0;
+
+    }
+    else if (2*T <= t_norm && t_norm < 4*T)  //RL stance
+    {
+        state_FL->posRW_ref[1] += 0.0001*wd; 
+        state_FL->posRW_des[1] += 0.0001*wd; 
+        state_FL->posRW_ref[0] = r0;
+        state_FL->posRW_des[0] = r0;
+    }
+    }
+}

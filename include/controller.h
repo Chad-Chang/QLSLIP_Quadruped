@@ -67,6 +67,8 @@ private:
     Vector2d forceExt_hat_old2; 
     double cut_off_fob;
 
+    // Vector2d ;
+
 
 
 public:
@@ -83,6 +85,10 @@ public:
     void ctrl_update(); // 이걸 사용할지에 대해서 생각해보기
     void ctrl_data_Logging();
     void ctrl_data_init();
+    Vector2d nonlinear_compensation_torque(StateModel_* state_model);
+    Vector2d inertia_modulation_torque(StateModel_* state_model, double M_des);
+    Vector2d feedback_bi_control(StateModel_* state_model, double M_des, double Bm, double wd);
+    
     
 
 };

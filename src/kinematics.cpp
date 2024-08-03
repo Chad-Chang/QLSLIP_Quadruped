@@ -108,12 +108,27 @@ void kinematics::model_param_cal(const mjModel* m, mjData* d, StateModel_* state
     // cout << state_model->Lamda_nominal_DOB <<endl;
     
     //Coriolis & Gravity
-    H[0] = -m_shank * d_shank * L * sin(state_model->q[1]) * pow(state_model->qdot_bi[1], 2)
-         - g * (m_thigh * d_thigh + m_shank * L) * cos(state_model->q_bi[0]);
 
-    H[1] = m_shank * d_shank * L * sin(state_model->q[1]) * pow(state_model->qdot_bi[0], 2)
-         - g * m_shank * d_shank * cos(state_model->q_bi[1]);
+    // H[0] = -m_shank * d_shank * L * sin(state_model->q[1]) * pow(state_model->qdot_bi[1], 2)
+    //      - g * (m_thigh * d_thigh + m_shank * L) * cos(state_model->q_bi[0]);
 
+    // H[1] = m_shank * d_shank * L * sin(state_model->q[1]) * pow(state_model->qdot_bi[0], 2)
+    //      - g * m_shank * d_shank * cos(state_model->q_bi[1]);
+
+    coriolis_bi_[0] = -m_shank*d_shank*L*sin(state_model->q[2])*pow(state_model->qddot_bi[1],2);
+    coriolis_bi_[1] = m_thigh*d_shank*L*sin(state_model->q[2]) * pow(state_model->qdot_bi[0], 2);
+    gravity_bi_[0] = g * (m_thigh * d_thigh + m_shank * L) * cos(state_model->q_bi[0]);
+    gravity_bi_[1] = g * m_shank * d_shank * cos(state_model->q_bi[2]);
+
+    off_diag_inertia_bi_(0,0)= 0;
+    off_diag_inertia_bi_(0,1)= m_shank*d_shank*L*cos(state_model->q[2]);
+    off_diag_inertia_bi_(1,0)= off_diag_inertia_bi_(0,1);
+    off_diag_inertia_bi_(1,1)= 0;
+    
+    state_model -> corriolis_bi_torq = coriolis_bi_;
+    state_model -> gravity_bi_torq = gravity_bi_;
+    state_model -> off_diag_inertia_bi = off_diag_inertia_bi_;
+    // diagonal inertia는 DOB의 nominal inertia
 }; // param_model parameter
 
 void kinematics::sensor_measure(const mjModel* m, mjData* d, StateModel_* state_model, int leg_no)
@@ -127,6 +142,10 @@ void kinematics::sensor_measure(const mjModel* m, mjData* d, StateModel_* state_
     state_model->q[0] = d->qpos[leg_no + 7];
     state_model->q[1] = d->qpos[leg_no + 8]; // (relative) HFE angle
     state_model->q[2] = d->qpos[leg_no + 9]; // (relative) KFE angle
+    
+    state_model->qdot[0] = d->qvel[leg_no + 7];
+    state_model->qdot[1] = d->qvel[leg_no + 8];
+    state_model->qdot[2] = d->qvel[leg_no + 9];
 
     /*** Biarticular Transformation ***/ 
     state_model->q_bi[0] = d->qpos[leg_no + 8];                             // (absolute) HFE angle
@@ -247,3 +266,4 @@ void kinematics::state_init(const mjModel* m, mjData* d, StateModel_* state_mode
     }
     // printf("%f, %f \n", state_model->q_bi_old[0], state_model->q_bi_old[1]);
 };
+

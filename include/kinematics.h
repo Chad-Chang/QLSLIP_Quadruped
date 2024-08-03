@@ -37,6 +37,11 @@ private:
     double JzzR_shank;
     double JzzR_couple;
 
+    Vector2d coriolis_bi_;
+    Vector2d gravity_bi_;
+    Matrix2d off_diag_inertia_bi_;
+
+
     double cut_off_cal; // Using in calculate vel,acc
 
     Matrix2d MatInertia_bi;
@@ -45,6 +50,7 @@ private:
 
     Vector2d H;
     Vector2d H_old;
+    
 
 public:
     kinematics(); //생성자
